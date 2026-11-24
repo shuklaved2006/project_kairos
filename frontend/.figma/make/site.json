@@ -1,0 +1,10 @@
+{
+  "description": "Turn scattered thoughts into editable tasks, habits, and events, then check capacity and make explicit trade-offs to plan commitments realistically.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
