@@ -1,3 +1,4 @@
+import { Mascot } from './Mascot'
 import { Children, useRef, useState, type KeyboardEvent } from 'react'
 import { ArrowRight, Brain, CalendarRange, CheckCircle2, Database, Layers3, ShieldCheck } from 'lucide-react'
 
@@ -46,6 +47,7 @@ export function Presentation({ onOpenApp, onWatchDemo }: Props) {
           </div>
         </div>
         <div className="hero-art" aria-label="Kairo workflow illustration">
+          <Mascot className="presentation-mascot" />
           <div className="thought-card">I need to get ready for Friday...</div>
           <div className="flow-line" />
           <div className="structured-card">

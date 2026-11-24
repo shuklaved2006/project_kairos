@@ -1,6 +1,6 @@
 import type { ApiErrorBody, Entry, Window } from './types'
 
-export const API_BASE = 'https://project-kairos-bay.vercel.app'
+export const API_BASE = '/api'
 export const API_VERSION = '0.2.0'
 
 export class ApiError extends Error {
