@@ -22,7 +22,7 @@ def test_gemini_wire_contract():
         return httpx.Response(200,json={'candidates':[{'finishReason':'STOP','content':{'parts':[{'text':'{"items":[]}'}]}}]})
     assert invoke(handler)=='{"items":[]}'
 
-@pytest.mark.parametrize('status,code',[(400,'provider_configuration'),(403,'provider_credentials'),(429,'provider_rate_limit'),(500,'provider_unavailable')])
+@pytest.mark.parametrize('status,code',[(400,'provider_configuration'),(403,'provider_credentials'),(429,'provider_rate_limit'),(500,'provider_internal_error'),(502,'provider_bad_gateway'),(503,'provider_overloaded'),(504,'provider_gateway_timeout'),(418,'provider_http_418')])
 def test_provider_errors_are_sanitized(status,code):
     with pytest.raises(GeminiError,match=code):
         invoke(lambda r:httpx.Response(status,text='secret echoed by provider'))

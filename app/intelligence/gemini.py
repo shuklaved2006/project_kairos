@@ -27,7 +27,9 @@ def provider_schema(schema):
 
 def provider_error(status, data):
     fallback = {400:'provider_configuration',401:'provider_credentials',403:'provider_credentials',
-                404:'provider_model_unavailable',429:'provider_rate_limit'}.get(status,'provider_unavailable')
+                404:'provider_model_unavailable',429:'provider_rate_limit',
+                500:'provider_internal_error',502:'provider_bad_gateway',
+                503:'provider_overloaded',504:'provider_gateway_timeout'}.get(status,f'provider_http_{status}')
     if status != 400:
         return fallback
     try:

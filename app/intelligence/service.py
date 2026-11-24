@@ -101,6 +101,7 @@ def register_routes(app, authenticate, transaction, get, all_of, provider=None):
             conn.execute(insert(records).values(**run))
         previous = None
         validation_code = None
+        attempt_diagnostics = []
         for attempt in range(MAX_ATTEMPTS):
             # Commit reservations BEFORE waiting for the provider. No DB lock spans network I/O.
             with transaction() as conn:
@@ -130,6 +131,7 @@ def register_routes(app, authenticate, transaction, get, all_of, provider=None):
                 previous = interpreted.model_dump(mode='json')
                 validation_code = None
                 if attempt == 0 and needs_review(interpreted):
+                    attempt_diagnostics.append({'attempt':attempt+1,'outcome':'validated_requires_review'})
                     continue
                 requirements = review_requirements(interpreted)
                 clarification = bool(interpreted.questions) or any(r['missing_fields'] for r in requirements)
@@ -141,6 +143,7 @@ def register_routes(app, authenticate, transaction, get, all_of, provider=None):
             except OutputRejected as exc:
                 # Do not persist malformed raw output; replay original source and bounded error codes.
                 validation_code = str(exc)
+                attempt_diagnostics.append({'attempt':attempt+1,'outcome':validation_code})
                 previous = None
             except GeminiError as exc:
                 validation_code = exc.code
@@ -155,4 +158,5 @@ def register_routes(app, authenticate, transaction, get, all_of, provider=None):
         with transaction() as conn:
             run = get(conn,identifier,'ai_run')
             return save_run(conn,run,status='needs_manual_review',error=validation_code or 'unresolved',result=None,
+                            attempt_diagnostics=attempt_diagnostics + ([] if attempt_diagnostics and attempt_diagnostics[-1]['attempt'] == run['data']['attempts'] else [{'attempt':run['data']['attempts'],'outcome':validation_code or 'unresolved'}]),
                             finished_at=datetime.now(timezone.utc).isoformat())
