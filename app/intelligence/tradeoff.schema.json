@@ -1,0 +1,105 @@
+{
+  "$defs": {
+    "TradeoffChange": {
+      "additionalProperties": false,
+      "properties": {
+        "entry_id": {
+          "title": "Entry Id",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        },
+        "operation": {
+          "enum": [
+            "defer",
+            "move",
+            "reduce_scope"
+          ],
+          "title": "Operation",
+          "type": "string"
+        },
+        "start": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start"
+        },
+        "end": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "End"
+        },
+        "estimated_minutes": {
+          "anyOf": [
+            {
+              "maximum": 10080,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Estimated Minutes"
+        },
+        "scope_description": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope Description"
+        }
+      },
+      "required": [
+        "entry_id",
+        "version",
+        "operation"
+      ],
+      "title": "TradeoffChange",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "changes": {
+      "items": {
+        "$ref": "#/$defs/TradeoffChange"
+      },
+      "maxItems": 5,
+      "minItems": 1,
+      "title": "Changes",
+      "type": "array"
+    }
+  },
+  "required": [
+    "changes"
+  ],
+  "title": "Tradeoff",
+  "type": "object"
+}

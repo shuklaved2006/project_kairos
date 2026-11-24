@@ -1,0 +1,335 @@
+{
+  "$defs": {
+    "Evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "enum": [
+            "title",
+            "kind",
+            "deadline",
+            "start",
+            "end",
+            "estimated_minutes",
+            "priority",
+            "recurrence",
+            "category",
+            "quantity",
+            "estimate_qualifier",
+            "estimate_basis"
+          ],
+          "title": "Field",
+          "type": "string"
+        },
+        "origin": {
+          "enum": [
+            "explicit",
+            "derived",
+            "suggested",
+            "unknown"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "quote": {
+          "maxLength": 1000,
+          "title": "Quote",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 500,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field",
+        "origin",
+        "quote",
+        "reason"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    },
+    "Proposal": {
+      "additionalProperties": false,
+      "properties": {
+        "temp_id": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Temp Id",
+          "type": "string"
+        },
+        "operation": {
+          "const": "create_draft",
+          "title": "Operation",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "TASK",
+            "RECURRING_HABIT",
+            "CALENDAR_EVENT"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "source_quote": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Source Quote",
+          "type": "string"
+        },
+        "deadline": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Deadline"
+        },
+        "start": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Start"
+        },
+        "end": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "End"
+        },
+        "estimated_minutes": {
+          "anyOf": [
+            {
+              "maximum": 10080,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Estimated Minutes"
+        },
+        "priority": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Priority"
+        },
+        "recurrence": {
+          "anyOf": [
+            {
+              "enum": [
+                "daily",
+                "weekly"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Recurrence"
+        },
+        "category": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Category"
+        },
+        "quantity": {
+          "default": 1,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Quantity",
+          "type": "integer"
+        },
+        "estimate_qualifier": {
+          "default": "unspecified",
+          "enum": [
+            "approximate",
+            "minimum",
+            "unspecified"
+          ],
+          "title": "Estimate Qualifier",
+          "type": "string"
+        },
+        "estimate_basis": {
+          "default": "total",
+          "enum": [
+            "per_item",
+            "total"
+          ],
+          "title": "Estimate Basis",
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "maxItems": 13,
+          "minItems": 2,
+          "title": "Evidence",
+          "type": "array"
+        },
+        "missing_fields": {
+          "items": {
+            "enum": [
+              "deadline",
+              "start",
+              "end",
+              "estimated_minutes",
+              "priority",
+              "recurrence"
+            ],
+            "type": "string"
+          },
+          "maxItems": 6,
+          "title": "Missing Fields",
+          "type": "array"
+        }
+      },
+      "required": [
+        "temp_id",
+        "operation",
+        "title",
+        "kind",
+        "source_quote",
+        "deadline",
+        "start",
+        "end",
+        "estimated_minutes",
+        "priority",
+        "recurrence",
+        "category",
+        "evidence",
+        "missing_fields"
+      ],
+      "title": "Proposal",
+      "type": "object"
+    },
+    "Question": {
+      "additionalProperties": false,
+      "properties": {
+        "item_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Item Id"
+        },
+        "question": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Question",
+          "type": "string"
+        }
+      },
+      "required": [
+        "item_id",
+        "question"
+      ],
+      "title": "Question",
+      "type": "object"
+    },
+    "Unfiled": {
+      "additionalProperties": false,
+      "properties": {
+        "source_quote": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Source Quote",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_quote",
+        "reason"
+      ],
+      "title": "Unfiled",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/Proposal"
+      },
+      "maxItems": 20,
+      "title": "Items",
+      "type": "array"
+    },
+    "questions": {
+      "items": {
+        "$ref": "#/$defs/Question"
+      },
+      "maxItems": 3,
+      "title": "Questions",
+      "type": "array"
+    },
+    "unfiled": {
+      "items": {
+        "$ref": "#/$defs/Unfiled"
+      },
+      "maxItems": 20,
+      "title": "Unfiled",
+      "type": "array"
+    }
+  },
+  "required": [
+    "items",
+    "questions",
+    "unfiled"
+  ],
+  "title": "Interpretation",
+  "type": "object"
+}
