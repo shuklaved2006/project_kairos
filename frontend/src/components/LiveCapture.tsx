@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { apiRequest } from '../lib/api'
 import { supabase } from '../lib/supabase'
@@ -8,6 +8,12 @@ type Proposal = { temp_id: string; title: string; kind: string; source_quote: st
 type Run = { id: string; data: { status: string; attempts: number; model: string; error: string | null; result: { items: Proposal[]; questions: { question: string }[]; unfiled: { source_quote: string; reason: string }[] } | null; review_requirements?: {item_id:string; missing_fields:string[]; confirm_fields:string[]}[] } }
 
 export function LiveCapture({ session }: { session: Session | null }) {
+  const dialog = useRef<HTMLDialogElement>(null)
+  const [outputOpen, setOutputOpen] = useState(false)
+  useEffect(() => {
+    if (outputOpen) dialog.current?.showModal()
+    else dialog.current?.close()
+  }, [outputOpen])
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [run, setRun] = useState<Run | null>(null)
@@ -18,7 +24,7 @@ export function LiveCapture({ session }: { session: Session | null }) {
     event.preventDefault()
     if (inFlight.current || !text.trim()) return
     if (!session) { setError('Sign in to test Gemini. Preview mode does not use API requests.'); return }
-    inFlight.current = true; setBusy(true); setError(''); setRun(null)
+    inFlight.current = true; setBusy(true); setOutputOpen(true); setError(''); setRun(null)
     try {
       const fresh = await supabase?.auth.getSession()
       const token = fresh?.data.session?.access_token || session.access_token
@@ -43,10 +49,15 @@ export function LiveCapture({ session }: { session: Session | null }) {
     <form className="capture-box" onSubmit={submit}>
       <label htmlFor="live-dump">Mind dump</label>
       <textarea id="live-dump" maxLength={10000} value={text} onChange={e => setText(e.target.value)} placeholder="Type your mind dump here. Nothing is accepted automatically." />
-      <button className="button primary" disabled={busy || !text.trim()}>{busy ? 'Processing?' : 'Sort my thoughts'}</button>
-      {error && <div className="notice error" role="alert">{error}</div>}
+      <button className="button primary" disabled={busy || !text.trim()}>{busy ? 'Processing...' : 'Sort my thoughts'}</button>
+      {!outputOpen && error && <div className="notice error" role="alert">{error}</div>}
     </form>
-    {run && <details className="dump-results"><summary>View results and questions</summary><p className="helper" role="status">Status: {run.data.status.replace(/_/g, ' ')} · Requests used: {run.data.attempts} · Model: {run.data.model}</p>
+    {(run || busy) && <button type="button" className="button secondary" onClick={() => setOutputOpen(true)}>View response</button>}
+    <dialog ref={dialog} className="ai-output-dialog" aria-labelledby="ai-output-title" onCancel={() => setOutputOpen(false)} onClose={() => setOutputOpen(false)}>
+      <header className="ai-output-header"><h2 id="ai-output-title">Kairo's response</h2><button type="button" className="button ghost small" onClick={() => setOutputOpen(false)} aria-label="Close response">Close</button></header>
+      {busy && <p role="status">Reading your dump and checking the proposals...</p>}
+      {error && <div className="notice error" role="alert">{error}</div>}
+      {run && <p className="helper" role="status">Status: {run.data.status.replace(/_/g, ' ')} · Requests used: {run.data.attempts} · Model: {run.data.model}</p>}
     {run?.data.result && <>
       <section className="review-intro"><h2>{run.data.result.items.length} proposals — not accepted commitments</h2></section>
       <div className="proposal-list">{run.data.result.items.map(item => <article className="proposal-card" key={item.temp_id}>
@@ -61,6 +72,6 @@ export function LiveCapture({ session }: { session: Session | null }) {
       {!!run.data.result.unfiled.length && <section className="clarifications"><h2>Not filed as commitments</h2>{run.data.result.unfiled.map((u,i)=><p key={i}>{u.source_quote} — {u.reason}</p>)}</section>}
       <p className="helper">This first live test verifies interpretation only. Saving reviewed proposals, planning and focus integration are separate checks.</p>
     </>}
-    </details>}
+    </dialog>
   </div>
 }
