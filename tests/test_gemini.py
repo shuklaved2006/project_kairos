@@ -43,3 +43,27 @@ def test_group_quantity_and_minimum_have_evidence():
     assert result.items[0].quantity*result.items[0].estimated_minutes==120
     item['evidence'].pop()
     with pytest.raises(OutputRejected): validate_output(json.dumps(proposal),source)
+
+
+def test_full_schema_is_simplified_without_mutating_validator():
+    from app.intelligence.contracts import Interpretation
+    from app.intelligence.gemini import provider_schema
+    original = Interpretation.model_json_schema()
+    reduced = provider_schema(original)
+    assert 'maxItems' in original['properties']['items']
+    assert 'maxItems' not in reduced['properties']['items']
+    assert reduced['$defs']['Proposal']['properties']['kind']['enum'] == ['TASK', 'RECURRING_HABIT', 'CALENDAR_EVENT']
+    assert reduced['$defs']['Proposal']['additionalProperties'] is False
+    assert reduced['$defs']['Proposal']['required'] == original['$defs']['Proposal']['required']
+
+
+@pytest.mark.parametrize('message,code', [
+    ('Response schema has too many states', 'provider_schema_rejected'),
+    ('API key not valid: secret', 'provider_credentials'),
+    ('User location is not supported', 'provider_region_unsupported'),
+    ('Free tier not available; enable billing', 'provider_account_configuration'),
+])
+def test_safe_configuration_diagnostics(message, code):
+    with pytest.raises(GeminiError) as error:
+        invoke(lambda r: httpx.Response(400, json={'error': {'message': message}}))
+    assert str(error.value) == code
