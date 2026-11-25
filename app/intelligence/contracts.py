@@ -29,7 +29,7 @@ class Proposal(StrictModel):
     quantity: int = Field(default=1,ge=1,le=100)
     estimate_qualifier: Literal['approximate','minimum','unspecified'] = 'unspecified'
     estimate_basis: Literal['per_item','total'] = 'total'
-    evidence: list[Evidence] = Field(min_length=2,max_length=13)
+    evidence: list[Evidence] = Field(min_length=2,max_length=13, description='One record per non-null field: title, kind, deadline, start, end, estimated_minutes, priority, recurrence, category, anchor_date. Include title and kind even when obvious. Also cover nondefault quantity, estimate_basis and estimate_qualifier. Each explicit or derived value needs an exact source quote. No duplicate field names.')
     missing_fields: list[Literal['deadline','start','end','estimated_minutes','priority','recurrence']] = Field(max_length=6)
 
     @model_validator(mode='after')

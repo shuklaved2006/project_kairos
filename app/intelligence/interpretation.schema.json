@@ -291,6 +291,7 @@
           "type": "string"
         },
         "evidence": {
+          "description": "One record per non-null field: title, kind, deadline, start, end, estimated_minutes, priority, recurrence, category, anchor_date. Include title and kind even when obvious. Also cover nondefault quantity, estimate_basis and estimate_qualifier. Each explicit or derived value needs an exact source quote. No duplicate field names.",
           "items": {
             "$ref": "#/$defs/Evidence"
           },

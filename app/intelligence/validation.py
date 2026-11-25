@@ -17,7 +17,7 @@ def validate_output(raw, source):
     identifiers = [item.temp_id for item in value.items]
     if len(set(identifiers)) != len(identifiers):
         raise OutputRejected('duplicate_item_id')
-    for item in value.items:
+    for item_index, item in enumerate(value.items):
         if item.source_quote not in source:
             raise OutputRejected('unsupported_source_quote')
         evidence = {e.field:e for e in item.evidence}
@@ -27,18 +27,18 @@ def validate_output(raw, source):
             field_value = getattr(item,field)
             proof = evidence.get(field)
             if field_value is not None and (proof is None or proof.origin == 'unknown'):
-                raise OutputRejected('missing_evidence')
+                raise OutputRejected(f'missing_evidence:items[{item_index}].{field}')
             if field_value is None and proof and proof.origin != 'unknown':
-                raise OutputRejected('contradictory_evidence')
+                raise OutputRejected(f'contradictory_evidence:items[{item_index}].{field}')
             if proof and proof.quote and proof.quote not in source:
                 raise OutputRejected('invented_evidence_quote')
             if proof and proof.origin in ('explicit','derived') and not proof.quote:
-                raise OutputRejected('missing_evidence_quote')
+                raise OutputRejected(f'missing_evidence_quote:items[{item_index}].{field}')
         for field, default in (('quantity',1),('estimate_qualifier','unspecified'),('estimate_basis','total')):
             if getattr(item,field) != default:
                 proof=evidence.get(field)
                 if proof is None or proof.origin == 'unknown' or not proof.quote or proof.quote not in source:
-                    raise OutputRejected('missing_quantity_or_estimate_evidence')
+                    raise OutputRejected(f'missing_quantity_or_estimate_evidence:items[{item_index}].{field}')
         if item.estimated_minutes is None and item.estimate_qualifier != 'unspecified':
             raise OutputRejected('qualifier_without_estimate')
         if any(getattr(item,field) is not None for field in item.missing_fields):

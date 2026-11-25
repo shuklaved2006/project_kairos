@@ -187,3 +187,18 @@ def test_cross_account_run_access_is_denied(monkeypatch):
         client.headers['Authorization']='Bearer bob'
         assert client.get('/intelligence/runs/'+result['id']).status_code==404
         assert client.post('/intelligence/interpret',json=body).status_code==404
+
+
+def test_missing_evidence_identifies_field_without_weakening_validation():
+    data=output()
+    data['items'][0]['evidence']=[e for e in data['items'][0]['evidence'] if e['field']!='kind']
+    with pytest.raises(OutputRejected) as error:
+        validate_output(json.dumps(data),SOURCE)
+    assert str(error.value)=='missing_evidence:items[0].kind'
+    provider=FakeProvider([data,output()])
+    with setup(provider) as client:
+        result=client.post('/intelligence/interpret',json=request(captured(client))).json()['data']
+        assert result['result'] is not None
+        assert result['attempts']==2
+        assert provider.calls[1]['payload']['review_context']['validation_code']=='missing_evidence:items[0].kind'
+        assert client.get('/entries').json()==[]

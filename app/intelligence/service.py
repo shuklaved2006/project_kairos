@@ -16,7 +16,7 @@ from .gemini import GeminiError
 from .contracts import InterpretRequest, Interpretation
 from .validation import validate_output, needs_review, review_requirements, OutputRejected
 
-PROMPT_VERSION = 'kairo-3'
+PROMPT_VERSION = 'kairo-4'
 SCHEMA_VERSION = 2
 MAX_ATTEMPTS = 2
 ATTEMPT_TIMEOUT_SECONDS = 20
