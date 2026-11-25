@@ -75,6 +75,7 @@ class InterpretRequest(StrictModel):
     capture_id: str = Field(min_length=1,max_length=128)
     horizon: Window
     demo_stage: Literal[1,2,3] = 1
+    retry_nonce: str | None = Field(default=None,min_length=1,max_length=64)
 
 class TradeoffChange(StrictModel):
     entry_id: str

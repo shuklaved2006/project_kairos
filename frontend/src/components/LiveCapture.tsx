@@ -5,8 +5,27 @@ import { request, readLocal, writeLocal, type Run } from '../lib/workspace'
 import { Mascot } from './Mascot'
 
 type Recognition = {lang:string;continuous:boolean;interimResults:boolean;start:()=>void;stop:()=>void;abort:()=>void;onresult:((event:any)=>void)|null;onerror:((event:any)=>void)|null;onend:(()=>void)|null}
-type Attempt={text:string;stage:number;key:string;captureId?:string;horizon:{start:string;end:string}}
-const nonsense=['Kairo has opened 14 tabs. All of them are about biscuits.','A cloud just declined a meeting because it was overcast.','Your calendar called. It would like a snack break.','No dogs were asked to drive during this calculation.']
+type Attempt={retry_nonce?:string;text:string;stage:number;key:string;captureId?:string;horizon:{start:string;end:string}}
+const nonsense=[
+ 'Kairo has opened 14 tabs. All of them are about biscuits.',
+ 'A cloud declined a meeting. Its schedule was overcast.',
+ 'Your calendar called. It would like a snack break.',
+ 'No dogs were asked to drive during this calculation.',
+ 'The hamster powering this app has requested tiny headphones.',
+ 'A potato just added CEO to its calendar.',
+ 'Kairo tried to download more time. The file was too tomorrow.',
+ 'Your tasks are lining up. One brought a folding chair.',
+ 'A pigeon has reviewed this plan. It recommends more crumbs.',
+ 'The moon is working remotely again.',
+ 'Kairo put the deadline in a sweater. It looked cold.',
+ 'Somewhere, a spoon is wondering why forks get all the pasta.',
+ 'The biscuits have formed a productivity committee.',
+ 'A very small duck is checking the very big clock.',
+ 'Kairo has promoted the space bar to head of breathing room.',
+ 'Your to-do list tried yoga. It is now a to-stretch list.'
+]
+function shuffledJokes(){const ids=nonsense.map((_,i)=>i);for(let i=ids.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[ids[i],ids[j]]=[ids[j],ids[i]]}return ids.slice(0,4)}
+
 export function LiveCapture({session,stage,onBusy,onSaved,selectedRun}:{session:Session|null;stage:number;onBusy:(value:boolean)=>void;onSaved:()=>void;selectedRun:Run|null}) {
  const storage='kairo:'+ (session?.user.id || 'preview')
  const [text,setText]=useState(()=>readLocal(storage+':dump',''))
@@ -20,7 +39,7 @@ export function LiveCapture({session,stage,onBusy,onSaved,selectedRun}:{session:
  useEffect(()=>{writeLocal(storage+':run',run)},[run,storage])
  useEffect(()=>{if(selectedRun && !inFlight.current) {setRun(selectedRun);setError('');setNotice('')}},[selectedRun])
  useEffect(()=>{onBusy(busy || listening)},[busy,listening,onBusy])
- useEffect(()=>{if(!busy)return;setFact(Math.floor(Math.random()*nonsense.length));const timer=setInterval(()=>setFact(n=>(n+1)%nonsense.length),6000);return()=>clearInterval(timer)},[busy])
+ useEffect(()=>{if(!busy)return;const sequence=shuffledJokes();let index=0;setFact(sequence[0]);const timer=setInterval(()=>{index++;if(index<sequence.length)setFact(sequence[index]);else clearInterval(timer)},6000);return()=>clearInterval(timer)},[busy])
  function voice() {
   if(listening){recognition.current?.stop();return}
   const Constructor=(window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
@@ -32,18 +51,18 @@ export function LiveCapture({session,stage,onBusy,onSaved,selectedRun}:{session:
   rec.onend=()=>{setListening(false);setInterim('')}
   setError('');try{rec.start();setListening(true)}catch{setError('Could not start the microphone. Please type your dump.')}
  }
- async function submit(event:FormEvent) {
-  event.preventDefault();if(inFlight.current || listening || !text.trim())return
+ async function submit(event?:FormEvent) {
+  event?.preventDefault();if(inFlight.current || listening || !text.trim())return
   if(!session){setError('Sign in to use Gemini and save your plans.');return}
   inFlight.current=true;setBusy(true);setError('');setNotice('');setRun(null)
   try {
    if(attempt.current?.text!==text.trim() || attempt.current.stage!==stage){const start=new Date();attempt.current={text:text.trim(),stage,key:crypto.randomUUID(),horizon:{start:start.toISOString(),end:new Date(start.getTime()+7*86400000).toISOString()}};writeLocal(storage+':attempt',attempt.current)}
    const current=attempt.current!
    if(!current.captureId){const capture=await request<{id:string}>(session,'/captures',{text:current.text},'POST',current.key);current.captureId=capture.id;writeLocal(storage+':attempt',current)}
-   let response=await request<Run>(session,'/intelligence/interpret',{capture_id:current.captureId,horizon:current.horizon,demo_stage:stage})
+   let response=await request<Run>(session,'/intelligence/interpret',{capture_id:current.captureId,horizon:current.horizon,demo_stage:stage,retry_nonce:current.retry_nonce})
    setRun(response)
    for(let i=0;response.data.status==='processing' && i<30;i++){await new Promise(resolve=>setTimeout(resolve,2000));response=await request<Run>(session,'/intelligence/runs/'+encodeURIComponent(response.id));setRun(response)}
-   if(!response.data.result)setError(response.data.error || 'Still processing. Your saved run is available in History; reopening it does not call Gemini.')
+   if(!response.data.result)setError(response.data.retryable ? 'Google is temporarily busy. Your dump is saved and nothing was changed. Retry when ready; each retry uses up to two requests.' : response.data.error || 'Still processing. Your saved run is available in History; reopening it does not call Gemini.')
    onSaved()
   }catch(cause){setError(cause instanceof Error?cause.message:'Request failed. Your dump is preserved.')}finally{inFlight.current=false;setBusy(false)}
  }
@@ -54,6 +73,8 @@ export function LiveCapture({session,stage,onBusy,onSaved,selectedRun}:{session:
    <header><strong>{busy?'Kairo is on it...':'A little clarity'}</strong>{busy&&<LoaderCircle className="spin" size={19}/>}</header>
    {busy&&<p role="status" className="silly-fact">{nonsense[fact]} <small>A completely unserious intermission.</small></p>}
    {error&&<p role="alert" className="notice error">{error}</p>}{notice&&<p role="status">{notice}</p>}
+   {!busy&&run?.data.retryable&&<button type="button" className="button secondary" onClick={()=>{if(inFlight.current||!attempt.current)return;attempt.current.retry_nonce=crypto.randomUUID();writeLocal(storage+':attempt',attempt.current);void submit()}}>Retry saved dump (up to 2 requests)</button>}
+   {!busy&&run?.data.warning&&<p className="notice" role="status">{run.data.warning}</p>}
    {!busy&&run?.data.result&&<>
     <p className="response-message">{run.data.result.message || 'Here is what I found. Review each suggestion before saving.'}</p>
     {run.data.result.items.map(item=><article className="suggestion" key={item.temp_id}>

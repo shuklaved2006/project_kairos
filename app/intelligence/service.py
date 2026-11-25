@@ -1,5 +1,7 @@
 """Provider-neutral orchestration. No live Gemini adapter or API key is enabled."""
 import asyncio
+import random
+import httpx
 import hashlib
 import json
 from datetime import datetime, timezone, timedelta
@@ -16,9 +18,10 @@ from .gemini import GeminiError
 from .contracts import InterpretRequest, Interpretation
 from .validation import validate_output, needs_review, review_requirements, OutputRejected
 
-PROMPT_VERSION = 'kairo-4'
+PROMPT_VERSION = 'kairo-5'
 SCHEMA_VERSION = 2
 MAX_ATTEMPTS = 2
+TRANSIENT_ERRORS = {'provider_overloaded','provider_internal_error','provider_bad_gateway','provider_gateway_timeout','provider_timeout_or_unavailable','provider_http_408'}
 ATTEMPT_TIMEOUT_SECONDS = 20
 USER_DAILY_LIMIT = 20
 PROMPTS = Path(__file__).parent/'prompts'
@@ -165,9 +168,17 @@ def register_routes(app, authenticate, transaction, get, all_of, provider=None):
                 previous = None
             except GeminiError as exc:
                 validation_code = exc.code
+                attempt_diagnostics.append({'attempt':attempt+1,'outcome':validation_code})
+                if validation_code in TRANSIENT_ERRORS and attempt+1 < MAX_ATTEMPTS:
+                    await asyncio.sleep(random.uniform(0.8,1.5))
+                    continue
                 break
-            except (TimeoutError,ConnectionError):
+            except (TimeoutError,ConnectionError,httpx.TransportError):
                 validation_code = 'provider_timeout_or_unavailable'
+                attempt_diagnostics.append({'attempt':attempt+1,'outcome':validation_code})
+                if attempt+1 < MAX_ATTEMPTS:
+                    await asyncio.sleep(random.uniform(0.8,1.5))
+                    continue
                 break
             except Exception:
                 # Do not expose SDK exception messages, prompts, or keys in API responses.
@@ -175,6 +186,14 @@ def register_routes(app, authenticate, transaction, get, all_of, provider=None):
                 break
         with transaction() as conn:
             run = get(conn,identifier,'ai_run')
+            if previous is not None and validation_code in TRANSIENT_ERRORS:
+                candidate = validate_output(json.dumps(previous),capture['data']['text'])
+                return save_run(conn,run,status='awaiting_user_review',error=None,result=previous,
+                    review_requirements=review_requirements(candidate),requires_user_approval=True,
+                    automated_review_complete=False,
+                    warning='The second AI review was unavailable. These proposals passed backend validation but need your careful review before approval.',
+                    attempt_diagnostics=attempt_diagnostics,finished_at=datetime.now(timezone.utc).isoformat())
             return save_run(conn,run,status='needs_manual_review',error=validation_code or 'unresolved',result=None,
+                            retryable=validation_code in TRANSIENT_ERRORS,
                             attempt_diagnostics=attempt_diagnostics + ([] if attempt_diagnostics and attempt_diagnostics[-1]['attempt'] == run['data']['attempts'] else [{'attempt':run['data']['attempts'],'outcome':validation_code or 'unresolved'}]),
                             finished_at=datetime.now(timezone.utc).isoformat())

@@ -115,7 +115,7 @@ def test_adversarial_or_unsupported_outputs_rejected(mutation):
     proposed=output(); mutation(proposed)
     with pytest.raises(OutputRejected): validate_output(json.dumps(proposed),SOURCE)
 
-def test_timeout_preserves_capture_and_does_not_retry(monkeypatch):
+def test_timeout_preserves_capture_and_retries_once(monkeypatch):
     class Slow(FakeProvider):
         async def generate(self,**kwargs):
             await asyncio.sleep(1)
@@ -123,7 +123,8 @@ def test_timeout_preserves_capture_and_does_not_retry(monkeypatch):
     monkeypatch.setattr(service,'ATTEMPT_TIMEOUT_SECONDS',0.001)
     with setup(Slow([])) as client:
         result=client.post('/intelligence/interpret',json=request(captured(client))).json()['data']
-        assert result['status']=='needs_manual_review' and result['attempts']==1
+        assert result['status']=='needs_manual_review' and result['attempts']==2
+        assert result['retryable'] is True
         assert client.get('/captures').json()[0]['data']['text']==SOURCE
 
 def test_provider_errors_do_not_leak_secrets():
@@ -202,3 +203,58 @@ def test_missing_evidence_identifies_field_without_weakening_validation():
         assert result['attempts']==2
         assert provider.calls[1]['payload']['review_context']['validation_code']=='missing_evidence:items[0].kind'
         assert client.get('/entries').json()==[]
+
+
+@pytest.mark.parametrize('code',['provider_overloaded','provider_internal_error','provider_gateway_timeout'])
+def test_transient_failure_retries_within_budget(code,monkeypatch):
+    from app.intelligence.gemini import GeminiError
+    async def no_delay(_): pass
+    monkeypatch.setattr(service.asyncio,'sleep',no_delay)
+    provider=FakeProvider([GeminiError(code),output()])
+    with setup(provider) as client:
+        result=client.post('/intelligence/interpret',json=request(captured(client))).json()['data']
+        assert result['result'] is not None and result['attempts']==2
+        assert client.get('/entries').json()==[]
+
+
+def test_review_outage_preserves_only_validated_candidate():
+    from app.intelligence.gemini import GeminiError
+    proposed=output();proposed['items'][0]['evidence'][2]['origin']='suggested'
+    with setup(FakeProvider([proposed,GeminiError('provider_overloaded')])) as client:
+        result=client.post('/intelligence/interpret',json=request(captured(client))).json()['data']
+        assert result['result'] is not None
+        assert result['automated_review_complete'] is False
+        assert result['warning'] and result['requires_user_approval']
+        assert client.get('/entries').json()==[]
+
+
+def test_outage_is_bounded_and_manual_retry_is_idempotent(monkeypatch):
+    from app.intelligence.gemini import GeminiError
+    async def no_delay(_): pass
+    monkeypatch.setattr(service.asyncio,'sleep',no_delay)
+    provider=FakeProvider([GeminiError('provider_overloaded')])
+    with setup(provider) as client:
+        body=request(captured(client))
+        result=client.post('/intelligence/interpret',json=body).json()['data']
+        assert result['retryable'] and result['result'] is None and result['attempts']==2
+        client.post('/intelligence/interpret',json=body)
+        assert len(provider.calls)==2
+        provider.results=[output()];body['retry_nonce']='explicit-retry'
+        assert client.post('/intelligence/interpret',json=body).json()['data']['result'] is not None
+        client.post('/intelligence/interpret',json=body)
+        assert len(provider.calls)==3
+
+
+def test_invalid_candidate_never_survives_review_outage():
+    from app.intelligence.gemini import GeminiError
+    with setup(FakeProvider(['invalid json',GeminiError('provider_overloaded')])) as client:
+        result=client.post('/intelligence/interpret',json=request(captured(client))).json()['data']
+        assert result['result'] is None and result['retryable']
+
+
+def test_credentials_failure_is_not_retried():
+    from app.intelligence.gemini import GeminiError
+    provider=FakeProvider([GeminiError('provider_credentials')])
+    with setup(provider) as client:
+        result=client.post('/intelligence/interpret',json=request(captured(client))).json()['data']
+        assert result['attempts']==1 and not result['retryable']
