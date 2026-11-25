@@ -1118,3 +1118,6 @@
 .response-scroll.has-details .response-message { min-height: var(--response-height); box-sizing: border-box; margin: 0; padding: 0 0 16px; }
 .response-scroll-hint { display: block; margin-top: 8px; font-size: 11px; color: #aaa; }
 .response-scroll:focus-visible { outline: 1px solid #888; outline-offset: 3px; border-radius: 6px; }
+
+.demo-video-player { display: block; width: 100%; max-height: 75svh; background: #000; border: 1px solid #333; border-radius: 20px; object-fit: contain; }
+.demo-video-download { display: inline-block; margin-top: 16px; color: #aaa; font-size: 14px; text-underline-offset: 4px; }

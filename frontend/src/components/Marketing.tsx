@@ -132,14 +132,13 @@ export function DemoVideo() {
       <div className="video-copy">
         <p className="eyebrow">Product walkthrough</p>
         <h1>See a messy day become a deliberate plan.</h1>
-        <p>A concise walkthrough of capture, clarification, capacity, and focus will live here.</p>
+        <p>Watch Kairo turn everyday commitments into a plan you can review.</p>
       </div>
-      <div className="video-placeholder">
-        <div className="video-mark"><Database size={26} /></div>
-        <h2>Demo video coming soon</h2>
-        <p>Replace this labeled placeholder when the final recording is supplied.</p>
-        <button className="button secondary" disabled>Video not yet supplied</button>
-      </div>
+      <video className="demo-video-player" controls playsInline preload="metadata" aria-label="Kairo product demo">
+        <source src="/videos/kairo-product-demo.mp4" type="video/mp4" />
+        Your browser cannot play this video. <a href="/videos/kairo-product-demo.mp4">Download the demo</a>.
+      </video>
+      <a className="demo-video-download" href="/videos/kairo-product-demo.mp4" download>Download the demo video</a>
     </main>
   )
 }
