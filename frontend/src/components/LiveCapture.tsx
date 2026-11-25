@@ -27,6 +27,7 @@ const nonsense=[
 function shuffledJokes(){const ids=nonsense.map((_,i)=>i);for(let i=ids.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[ids[i],ids[j]]=[ids[j],ids[i]]}return ids.slice(0,4)}
 
 export function LiveCapture({session,stage,onBusy,onSaved,selectedRun}:{session:Session|null;stage:number;onBusy:(value:boolean)=>void;onSaved:()=>void;selectedRun:Run|null}) {
+ const responseScroll=useRef<HTMLDivElement>(null)
  const storage='kairo:'+ (session?.user.id || 'preview')
  const [text,setText]=useState(()=>readLocal(storage+':dump',''))
  const [busy,setBusy]=useState(false), [listening,setListening]=useState(false), [interim,setInterim]=useState('')
@@ -34,6 +35,8 @@ export function LiveCapture({session,stage,onBusy,onSaved,selectedRun}:{session:
  const [fact,setFact]=useState(0), [language,setLanguage]=useState('en-IN')
  const attempt=useRef<Attempt|null>(readLocal(storage+':attempt',null)), inFlight=useRef(false), recognition=useRef<Recognition|null>(null)
  const [voiceAvailable,setVoiceAvailable]=useState(false)
+ const hasDetails=!!(run?.data.result && (run.data.result.items.length || run.data.result.questions.length || run.data.result.unfiled.length || run.data.result.amendments?.length))
+ useEffect(()=>{if(responseScroll.current)responseScroll.current.scrollTop=0},[run?.id,busy])
  useEffect(()=>{setVoiceAvailable(!!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition));return ()=>recognition.current?.abort()},[])
  useEffect(()=>{writeLocal(storage+':dump',text)},[text,storage])
  useEffect(()=>{writeLocal(storage+':run',run)},[run,storage])
@@ -71,6 +74,8 @@ export function LiveCapture({session,stage,onBusy,onSaved,selectedRun}:{session:
   <div className="dump-heading"><Mascot state={busy?'thinking':listening?'listening':run?.data.result?'ready':'idle'}/><p className="eyebrow">A little space for a busy mind</p><h1>Leave it with Kairo.</h1><p>Speak freely. We'll find the next step.</p></div>
   {(busy || run || error) && <section className="response-card" aria-label="Kairo response" aria-busy={busy}>
    <header><strong>{busy?'Kairo is on it...':'A little clarity'}</strong>{busy&&<LoaderCircle className="spin" size={19}/>}</header>
+   {!busy&&hasDetails&&<small className="response-scroll-hint">Scroll inside to review tasks and saved changes</small>}
+   <div ref={responseScroll} className={'response-scroll'+(!busy&&hasDetails?' has-details':'')} tabIndex={0} role="region" aria-label="Scrollable response and proposals">
    {busy&&<p role="status" className="silly-fact">{nonsense[fact]} <small>A completely unserious intermission.</small></p>}
    {error&&<p role="alert" className="notice error">{error}</p>}{notice&&<p role="status">{notice}</p>}
    {!busy&&run?.data.retryable&&<button type="button" className="button secondary" onClick={()=>{if(inFlight.current||!attempt.current)return;attempt.current.retry_nonce=crypto.randomUUID();writeLocal(storage+':attempt',attempt.current);void submit()}}>Retry saved dump (up to 2 requests)</button>}
@@ -89,6 +94,7 @@ export function LiveCapture({session,stage,onBusy,onSaved,selectedRun}:{session:
     {!!run.data.result.unfiled.length&&<details><summary>Context kept out of your lists</summary>{run.data.result.unfiled.map((u,i)=><p key={i}>{u.reason}</p>)}</details>}
     <small className="run-meta">{run.data.attempts} AI request(s) - Stage {run.data.demo_stage||1} - Nothing changes without approval.</small>
    </>}
+   </div>
   </section>}
   <form className="capture-box" onSubmit={submit}><label htmlFor="live-dump">Your mind dump</label><textarea id="live-dump" disabled={busy || listening} maxLength={10000} value={text} onChange={e=>setText(e.target.value)} placeholder="Assignments, plans, the thing you nearly forgot..."/>
    {interim&&<p aria-live="polite">{interim}</p>}

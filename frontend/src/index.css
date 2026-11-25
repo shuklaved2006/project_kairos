@@ -1112,3 +1112,9 @@
 @keyframes typing{to{transform:translateY(-4px)}}@keyframes response-arrive{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}@keyframes drawer-arrive{from{transform:translateX(100%)}to{transform:translateX(0)}}@keyframes kairo-spin{to{transform:rotate(360deg)}}
 @media(max-width:800px){.app-experience{padding:0;display:block}.desktop-story{display:none}.app-experience .minimal-app{width:100%;max-width:600px;margin:auto;min-height:100svh;border:0;border-radius:0;box-shadow:none;padding:20px max(20px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(20px,env(safe-area-inset-left))}.workspace-drawer{padding:20px}.dump-heading{margin:25px 0}.capture-controls .button{padding:10px}}
 @media(prefers-reduced-motion:reduce){.response-card,.workspace-drawer[open],.mascot-laptop,.typing-paw,.spin{animation:none}.kairo-mascot,.kairo-mascot img{transition:none}}
+
+/* Keep the response compact; preserve every proposal inside its own scroller. */
+.response-scroll { --response-height: clamp(160px, 28svh, 240px); max-height: var(--response-height); overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: #737373 #202020; margin-top: 12px; padding-right: 8px; }
+.response-scroll.has-details .response-message { min-height: var(--response-height); box-sizing: border-box; margin: 0; padding: 0 0 16px; }
+.response-scroll-hint { display: block; margin-top: 8px; font-size: 11px; color: #aaa; }
+.response-scroll:focus-visible { outline: 1px solid #888; outline-offset: 3px; border-radius: 6px; }
