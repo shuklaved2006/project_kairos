@@ -1,5 +1,80 @@
 {
   "$defs": {
+    "Amendment": {
+      "additionalProperties": false,
+      "properties": {
+        "amendment_id": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Amendment Id",
+          "type": "string"
+        },
+        "entry_id": {
+          "title": "Entry Id",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        },
+        "action": {
+          "enum": [
+            "reschedule",
+            "defer"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "start": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Start"
+        },
+        "end": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "End"
+        },
+        "source_quote": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Source Quote",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 500,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "amendment_id",
+        "entry_id",
+        "version",
+        "action",
+        "start",
+        "end",
+        "source_quote",
+        "reason"
+      ],
+      "title": "Amendment",
+      "type": "object"
+    },
     "Evidence": {
       "additionalProperties": false,
       "properties": {
@@ -16,7 +91,8 @@
             "category",
             "quantity",
             "estimate_qualifier",
-            "estimate_basis"
+            "estimate_basis",
+            "anchor_date"
           ],
           "title": "Field",
           "type": "string"
@@ -175,6 +251,19 @@
           ],
           "title": "Category"
         },
+        "anchor_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Anchor Date"
+        },
         "quantity": {
           "default": 1,
           "maximum": 100,
@@ -300,6 +389,20 @@
   },
   "additionalProperties": false,
   "properties": {
+    "message": {
+      "default": "",
+      "maxLength": 1800,
+      "title": "Message",
+      "type": "string"
+    },
+    "amendments": {
+      "items": {
+        "$ref": "#/$defs/Amendment"
+      },
+      "maxItems": 5,
+      "title": "Amendments",
+      "type": "array"
+    },
     "items": {
       "items": {
         "$ref": "#/$defs/Proposal"

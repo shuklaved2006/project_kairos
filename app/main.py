@@ -308,6 +308,8 @@ def create_app(url=None, token=None, auth_transport=None, intelligence_provider=
             return change(conn, row, {**row['data'], 'status':'stopped', 'stopped_at':now.isoformat(),
                           'elapsed_seconds':seconds, 'requires_duration_confirmation':True}, row['version'])
 
+    from .workspace import register_workspace
+    register_workspace(app, authenticate, transaction, get, all_of, add, change, log)
     from .intelligence.service import register_routes
     register_routes(app, authenticate, transaction, get, all_of, intelligence_provider)
     return app

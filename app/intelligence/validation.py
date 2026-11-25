@@ -23,7 +23,7 @@ def validate_output(raw, source):
         evidence = {e.field:e for e in item.evidence}
         if len(evidence) != len(item.evidence):
             raise OutputRejected('duplicate_evidence')
-        for field in ('title','kind','deadline','start','end','estimated_minutes','priority','recurrence','category'):
+        for field in ('title','kind','deadline','start','end','estimated_minutes','priority','recurrence','category','anchor_date'):
             field_value = getattr(item,field)
             proof = evidence.get(field)
             if field_value is not None and (proof is None or proof.origin == 'unknown'):
@@ -43,6 +43,12 @@ def validate_output(raw, source):
             raise OutputRejected('qualifier_without_estimate')
         if any(getattr(item,field) is not None for field in item.missing_fields):
             raise OutputRejected('contradictory_missing_field')
+    amendment_ids = [a.amendment_id for a in value.amendments]
+    if len(set(amendment_ids)) != len(amendment_ids) or set(amendment_ids) & set(identifiers):
+        raise OutputRejected('duplicate_amendment_id')
+    for amendment in value.amendments:
+        if amendment.source_quote not in source:
+            raise OutputRejected('unsupported_amendment_quote')
     for question in value.questions:
         if question.item_id is not None and question.item_id not in identifiers:
             raise OutputRejected('unknown_question_target')
@@ -59,7 +65,7 @@ def review_requirements(value):
         missing = set(item.missing_fields)
         if item.kind == 'TASK' and item.estimated_minutes is None:
             missing.add('estimated_minutes')
-        if item.kind in ('CALENDAR_EVENT','RECURRING_HABIT'):
+        if item.kind == 'CALENDAR_EVENT':
             if item.start is None: missing.add('start')
             if item.end is None: missing.add('end')
         if item.kind == 'RECURRING_HABIT' and item.recurrence is None:

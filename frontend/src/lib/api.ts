@@ -15,6 +15,7 @@ export class ApiError extends Error {
 function errorMessage(body: ApiErrorBody | null, status: number) {
   if (Array.isArray(body?.detail)) return body.detail.map((item) => item.msg).filter(Boolean).join(', ')
   if (typeof body?.detail === 'string') return body.detail
+  if (body?.detail && typeof body.detail === 'object') { const detail = body.detail as {state?:string;shortfall_minutes?:number;conflicts?:unknown[]}; return detail.shortfall_minutes ? `These commitments need about ${Math.ceil(detail.shortfall_minutes)} more minutes than your supplied availability. Revise your plan or explicitly acknowledge the risk.` : detail.conflicts?.length ? 'Scheduled commitments overlap. Move a commitment or explicitly acknowledge the conflict.' : 'Capacity is incomplete. Add missing durations, dates or availability, or explicitly acknowledge the uncertainty.' }
   return body?.message || `Request failed (${status})`
 }
 

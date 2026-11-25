@@ -16,7 +16,7 @@ from .gemini import GeminiError
 from .contracts import InterpretRequest, Interpretation
 from .validation import validate_output, needs_review, review_requirements, OutputRejected
 
-PROMPT_VERSION = 'kairo-2'
+PROMPT_VERSION = 'kairo-3'
 SCHEMA_VERSION = 2
 MAX_ATTEMPTS = 2
 ATTEMPT_TIMEOUT_SECONDS = 20
@@ -33,13 +33,22 @@ class Provider(Protocol):
         """
         ...
 
+def demo_profile(stage):
+    if stage == 1:
+        return {'stage':1,'source':'explicit_demo_fixture','understanding':'New user. No assumed preferences or estimates.'}
+    return {'stage':stage,'source':'explicit_demo_fixture',
+            'priorities':['College comes first','Active social life and friends matter','External research is important but secondary to college'],
+            'duration_examples':{'one_assignment_minutes':60,'revision_per_subject_unit_minutes':30},
+            'overcommitment_pattern':stage == 3,
+            'note':'Demo scenario supplied by the user, not measured learning. Current explicit instructions override these suggestions.'}
+
 def build_context(source, profile, entries, history, horizon, now):
     relevant = []
     for row in entries:
         data = row['data']
         timing = data.get('start') or data.get('deadline')
         inside = timing and horizon.start <= datetime.fromisoformat(timing) <= horizon.end
-        if data.get('status') == 'accepted' and (inside or data.get('recurrence')):
+        if data.get('status') in ('accepted','draft'):
             relevant.append({'id':row['id'],'version':row['version'], **{k:data.get(k) for k in
                 ('title','kind','deadline','start','end','estimated_minutes','priority','recurrence','category')}})
     categories = {r['category'] for r in relevant if r.get('category')}
@@ -55,7 +64,8 @@ def build_context(source, profile, entries, history, horizon, now):
     context = {'request_context':{'now':now.astimezone(ZoneInfo(zone)).isoformat(),'timezone':zone,
                  'horizon':horizon.model_dump(mode='json')},
                'untrusted_data':{'input':source,'existing_entries':relevant[:30],
-                                 'duration_history':summaries[:10]},
+                                 'duration_history':summaries[:10], 'demo_profile':profile.get('demo_profile',{}),
+                                 'availability':profile.get('availability',[])},
                'context_truncated':len(relevant)>30 or len(summaries)>10}
     if len(json.dumps(context).encode('utf-8')) > 40000:
         raise HTTPException(422,'Relevant context is too large; use a narrower input or horizon')
@@ -93,11 +103,12 @@ def register_routes(app, authenticate, transaction, get, all_of, provider=None):
                 return dict(existing)
             profile_rows = all_of(conn,'profile')
             profile = profile_rows[0]['data'] if profile_rows else {}
+            profile = {**profile, 'demo_profile':demo_profile(body.demo_stage)}
             context = build_context(capture['data']['text'],profile,all_of(conn,'entry'),all_of(conn,'duration'),body.horizon,now)
             run = {'id':identifier,'owner_id':owner,'kind':'ai_run','version':1,'data':{
                 'capture_id':capture['id'],'capture_version':capture['version'],'status':'processing','attempts':0,
                 'started_at':now.isoformat(),'prompt_version':PROMPT_VERSION,'schema_version':SCHEMA_VERSION,
-                'model':provider.model_name,'result':None,'error':None}}
+                'model':provider.model_name,'demo_stage':body.demo_stage,'result':None,'error':None}}
             conn.execute(insert(records).values(**run))
         previous = None
         validation_code = None
@@ -128,6 +139,13 @@ def register_routes(app, authenticate, transaction, get, all_of, provider=None):
                 raw = await asyncio.wait_for(provider.generate(system=INTERPRETER if attempt==0 else INTERPRETER+'\n'+REVIEWER,
                     payload=payload,schema=Interpretation.model_json_schema(),max_output_tokens=6000),ATTEMPT_TIMEOUT_SECONDS)
                 interpreted = validate_output(raw,capture['data']['text'])
+                known = {r['id']:r for r in context['untrusted_data']['existing_entries']}
+                for amendment in interpreted.amendments:
+                    target = known.get(amendment.entry_id)
+                    if not target or target['version'] != amendment.version or amendment.source_quote not in capture['data']['text']:
+                        raise OutputRejected('invalid_amendment_target_or_evidence')
+                    if amendment.action == 'reschedule' and (not amendment.start or not amendment.end or amendment.end <= amendment.start):
+                        raise OutputRejected('invalid_reschedule')
                 previous = interpreted.model_dump(mode='json')
                 validation_code = None
                 if attempt == 0 and needs_review(interpreted):

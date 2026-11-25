@@ -1,4 +1,4 @@
-﻿from datetime import datetime, timedelta
+﻿from datetime import date, datetime, timedelta
 from enum import Enum
 from typing import Literal
 from pydantic import BaseModel, Field, AwareDatetime, model_validator
@@ -19,6 +19,9 @@ class Entry(BaseModel):
     priority: int = Field(default=0, ge=0, le=100)
     recurrence: Literal['daily', 'weekly'] | None = None
     category: str | None = Field(default=None, max_length=100)
+    estimate_qualifier: Literal['approximate','minimum','unspecified'] = 'unspecified'
+    all_day: bool = False
+    anchor_date: date | None = None
     source_text: str | None = Field(default=None, max_length=10000)
 
     @model_validator(mode='after')
@@ -35,9 +38,13 @@ class Entry(BaseModel):
             raise ValueError('Accepted habits require recurrence')
         if self.recurrence and self.kind == Kind.TASK:
             raise ValueError('Tasks cannot recur; use a habit or event')
-        if self.recurrence and not self.start:
+        if self.all_day and (self.kind != Kind.RECURRING_HABIT or self.start or self.end):
+            raise ValueError('All-day routines must be habits without timed blocks')
+        if self.all_day and not self.anchor_date:
+            raise ValueError('All-day habit needs a start date')
+        if self.recurrence and not self.start and not self.all_day:
             raise ValueError('Recurrence requires an anchor start/end')
-        if self.recurrence and self.end - self.start >= timedelta(days=1 if self.recurrence == 'daily' else 7):
+        if self.recurrence and self.start and self.end - self.start >= timedelta(days=1 if self.recurrence == 'daily' else 7):
             raise ValueError('Occurrence must be shorter than recurrence interval')
         if self.kind == Kind.TASK and self.deadline and self.end and self.end > self.deadline:
             raise ValueError('Task block ends after deadline')

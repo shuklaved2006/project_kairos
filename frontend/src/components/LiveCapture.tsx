@@ -1,77 +1,80 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { apiRequest } from '../lib/api'
-import { supabase } from '../lib/supabase'
+import { Mic, Square, LoaderCircle, Send, Check } from 'lucide-react'
+import { request, readLocal, writeLocal, type Run } from '../lib/workspace'
 import { Mascot } from './Mascot'
 
-type Proposal = { temp_id: string; title: string; kind: string; source_quote: string; quantity: number; estimated_minutes: number | null; estimate_basis: string; estimate_qualifier: string; deadline: string | null; missing_fields: string[] }
-type Run = { id: string; data: { status: string; attempts: number; model: string; error: string | null; result: { items: Proposal[]; questions: { question: string }[]; unfiled: { source_quote: string; reason: string }[] } | null; review_requirements?: {item_id:string; missing_fields:string[]; confirm_fields:string[]}[] } }
-
-export function LiveCapture({ session }: { session: Session | null }) {
-  const dialog = useRef<HTMLDialogElement>(null)
-  const [outputOpen, setOutputOpen] = useState(false)
-  useEffect(() => {
-    if (outputOpen) dialog.current?.showModal()
-    else dialog.current?.close()
-  }, [outputOpen])
-  const [text, setText] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [run, setRun] = useState<Run | null>(null)
-  const [error, setError] = useState('')
-  const attempt = useRef<{ text: string; key: string; captureId?: string; horizon: { start: string; end: string } } | null>(null)
-  const inFlight = useRef(false)
-  async function submit(event: FormEvent) {
-    event.preventDefault()
-    if (inFlight.current || !text.trim()) return
-    if (!session) { setError('Sign in to test Gemini. Preview mode does not use API requests.'); return }
-    inFlight.current = true; setBusy(true); setOutputOpen(true); setError(''); setRun(null)
-    try {
-      const fresh = await supabase?.auth.getSession()
-      const token = fresh?.data.session?.access_token || session.access_token
-      if (attempt.current?.text !== text.trim()) {
-        const start = new Date(), end = new Date(start.getTime() + 7 * 86400000)
-        attempt.current = { text: text.trim(), key: crypto.randomUUID(), horizon: { start: start.toISOString(), end: end.toISOString() } }
-      }
-      const current = attempt.current!
-      if (!current.captureId) {
-        const capture = await apiRequest<{ id: string }>('/captures', token, { method: 'POST', body: JSON.stringify({ text: current.text }), idempotencyKey: current.key })
-        current.captureId = capture.id
-      }
-      const response = await apiRequest<Run>('/intelligence/interpret', token, { method: 'POST', body: JSON.stringify({ capture_id: current.captureId, horizon: current.horizon }) })
-      setRun(response)
-      if (!response.data.result) setError(response.data.error || `Run status: ${response.data.status}. No proposals were accepted.`)
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Request failed. Your text is preserved.')
-    } finally { inFlight.current = false; setBusy(false) }
-  }
-  return <div className="workspace-view">
-    <div className="dump-heading"><Mascot state={busy ? 'thinking' : run?.data.result ? 'ready' : 'idle'} /><h1>What's on your mind?</h1></div>
-    <form className="capture-box" onSubmit={submit}>
-      <label htmlFor="live-dump">Mind dump</label>
-      <textarea id="live-dump" maxLength={10000} value={text} onChange={e => setText(e.target.value)} placeholder="Type your mind dump here. Nothing is accepted automatically." />
-      <button className="button primary" disabled={busy || !text.trim()}>{busy ? 'Processing...' : 'Sort my thoughts'}</button>
-      {!outputOpen && error && <div className="notice error" role="alert">{error}</div>}
-    </form>
-    {(run || busy) && <button type="button" className="button secondary" onClick={() => setOutputOpen(true)}>View response</button>}
-    <dialog ref={dialog} className="ai-output-dialog" aria-labelledby="ai-output-title" onCancel={() => setOutputOpen(false)} onClose={() => setOutputOpen(false)}>
-      <header className="ai-output-header"><h2 id="ai-output-title">Kairo's response</h2><button type="button" className="button ghost small" onClick={() => setOutputOpen(false)} aria-label="Close response">Close</button></header>
-      {busy && <p role="status">Reading your dump and checking the proposals...</p>}
-      {error && <div className="notice error" role="alert">{error}</div>}
-      {run && <p className="helper" role="status">Status: {run.data.status.replace(/_/g, ' ')} · Requests used: {run.data.attempts} · Model: {run.data.model}</p>}
-    {run?.data.result && <>
-      <section className="review-intro"><h2>{run.data.result.items.length} proposals — not accepted commitments</h2></section>
-      <div className="proposal-list">{run.data.result.items.map(item => <article className="proposal-card" key={item.temp_id}>
-        <span className="kind-label">{item.kind.replace(/_/g, ' ')}</span><h3>{item.title}</h3>
-        <p>Quantity: {item.quantity ?? 1}</p>
-        <p>Effort: {item.estimated_minutes == null ? 'Unknown' : `${item.estimate_qualifier === 'minimum' ? 'At least ' : item.estimate_qualifier === 'approximate' ? 'About ' : ''}${item.estimated_minutes} minutes ${item.estimate_basis === 'per_item' ? 'each' : 'total'}`}</p>
-        <p>Deadline: {item.deadline ? new Date(item.deadline).toLocaleString() : 'Needs clarification'}</p>
-        <blockquote>{item.source_quote}</blockquote>
-        {run.data.review_requirements?.filter(r => r.item_id === item.temp_id).map(r => <p className="helper" key={r.item_id}>Missing: {r.missing_fields.join(', ') || 'None identified'} · Confirm: {r.confirm_fields.join(', ') || 'Review proposal'}</p>)}
-      </article>)}</div>
-      {!!run.data.result.questions.length && <section className="clarifications"><h2>A few questions</h2>{run.data.result.questions.map((q,i) => <p key={i}>{i+1}. {q.question}</p>)}<p className="helper">Include answers in an edited dump for a new test. This uses additional requests.</p></section>}
-      {!!run.data.result.unfiled.length && <section className="clarifications"><h2>Not filed as commitments</h2>{run.data.result.unfiled.map((u,i)=><p key={i}>{u.source_quote} — {u.reason}</p>)}</section>}
-      <p className="helper">This first live test verifies interpretation only. Saving reviewed proposals, planning and focus integration are separate checks.</p>
-    </>}
-    </dialog>
-  </div>
+type Recognition = {lang:string;continuous:boolean;interimResults:boolean;start:()=>void;stop:()=>void;abort:()=>void;onresult:((event:any)=>void)|null;onerror:((event:any)=>void)|null;onend:(()=>void)|null}
+type Attempt={text:string;stage:number;key:string;captureId?:string;horizon:{start:string;end:string}}
+const nonsense=['Kairo has opened 14 tabs. All of them are about biscuits.','A cloud just declined a meeting because it was overcast.','Your calendar called. It would like a snack break.','No dogs were asked to drive during this calculation.']
+export function LiveCapture({session,stage,onBusy,onSaved,selectedRun}:{session:Session|null;stage:number;onBusy:(value:boolean)=>void;onSaved:()=>void;selectedRun:Run|null}) {
+ const storage='kairo:'+ (session?.user.id || 'preview')
+ const [text,setText]=useState(()=>readLocal(storage+':dump',''))
+ const [busy,setBusy]=useState(false), [listening,setListening]=useState(false), [interim,setInterim]=useState('')
+ const [run,setRun]=useState<Run|null>(()=>readLocal(storage+':run',null)), [error,setError]=useState(''), [notice,setNotice]=useState('')
+ const [fact,setFact]=useState(0), [language,setLanguage]=useState('en-IN')
+ const attempt=useRef<Attempt|null>(readLocal(storage+':attempt',null)), inFlight=useRef(false), recognition=useRef<Recognition|null>(null)
+ const [voiceAvailable,setVoiceAvailable]=useState(false)
+ useEffect(()=>{setVoiceAvailable(!!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition));return ()=>recognition.current?.abort()},[])
+ useEffect(()=>{writeLocal(storage+':dump',text)},[text,storage])
+ useEffect(()=>{writeLocal(storage+':run',run)},[run,storage])
+ useEffect(()=>{if(selectedRun && !inFlight.current) {setRun(selectedRun);setError('');setNotice('')}},[selectedRun])
+ useEffect(()=>{onBusy(busy || listening)},[busy,listening,onBusy])
+ useEffect(()=>{if(!busy)return;setFact(Math.floor(Math.random()*nonsense.length));const timer=setInterval(()=>setFact(n=>(n+1)%nonsense.length),6000);return()=>clearInterval(timer)},[busy])
+ function voice() {
+  if(listening){recognition.current?.stop();return}
+  const Constructor=(window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+  if(!Constructor)return
+  const rec:Recognition=new Constructor();recognition.current=rec;rec.lang=language;rec.continuous=true;rec.interimResults=true
+  let confirmed=text.trim()
+  rec.onresult=(event:any)=>{let pending='';for(let i=event.resultIndex;i<event.results.length;i++){const words=event.results[i][0].transcript;if(event.results[i].isFinal)confirmed=(confirmed+' '+words).trim();else pending+=words}setText(confirmed.slice(0,10000));setInterim(pending)}
+  rec.onerror=(event:any)=>{setError(event.error==='not-allowed'?'Microphone permission was denied. Enable it in browser settings or type your dump.':'Voice input stopped. Your transcript is preserved; you can continue typing.');setListening(false);setInterim('')}
+  rec.onend=()=>{setListening(false);setInterim('')}
+  setError('');try{rec.start();setListening(true)}catch{setError('Could not start the microphone. Please type your dump.')}
+ }
+ async function submit(event:FormEvent) {
+  event.preventDefault();if(inFlight.current || listening || !text.trim())return
+  if(!session){setError('Sign in to use Gemini and save your plans.');return}
+  inFlight.current=true;setBusy(true);setError('');setNotice('');setRun(null)
+  try {
+   if(attempt.current?.text!==text.trim() || attempt.current.stage!==stage){const start=new Date();attempt.current={text:text.trim(),stage,key:crypto.randomUUID(),horizon:{start:start.toISOString(),end:new Date(start.getTime()+7*86400000).toISOString()}};writeLocal(storage+':attempt',attempt.current)}
+   const current=attempt.current!
+   if(!current.captureId){const capture=await request<{id:string}>(session,'/captures',{text:current.text},'POST',current.key);current.captureId=capture.id;writeLocal(storage+':attempt',current)}
+   let response=await request<Run>(session,'/intelligence/interpret',{capture_id:current.captureId,horizon:current.horizon,demo_stage:stage})
+   setRun(response)
+   for(let i=0;response.data.status==='processing' && i<30;i++){await new Promise(resolve=>setTimeout(resolve,2000));response=await request<Run>(session,'/intelligence/runs/'+encodeURIComponent(response.id));setRun(response)}
+   if(!response.data.result)setError(response.data.error || 'Still processing. Your saved run is available in History; reopening it does not call Gemini.')
+   onSaved()
+  }catch(cause){setError(cause instanceof Error?cause.message:'Request failed. Your dump is preserved.')}finally{inFlight.current=false;setBusy(false)}
+ }
+ async function approve(id:string){if(!session || !run || inFlight.current)return;inFlight.current=true;setBusy(true);setError('');try{const saved=await request<{run:Run;message:string}>(session,'/intelligence/runs/'+encodeURIComponent(run.id)+'/approve',{proposal_ids:[id]});setRun(saved.run);setNotice(saved.message);onSaved()}catch(cause){setError(cause instanceof Error?cause.message:'Could not save')}finally{inFlight.current=false;setBusy(false)}}
+ return <div className="workspace-view">
+  <div className="dump-heading"><Mascot state={busy?'thinking':listening?'listening':run?.data.result?'ready':'idle'}/><p className="eyebrow">A little space for a busy mind</p><h1>Leave it with Kairo.</h1><p>Speak freely. We'll find the next step.</p></div>
+  {(busy || run || error) && <section className="response-card" aria-label="Kairo response" aria-busy={busy}>
+   <header><strong>{busy?'Kairo is on it...':'A little clarity'}</strong>{busy&&<LoaderCircle className="spin" size={19}/>}</header>
+   {busy&&<p role="status" className="silly-fact">{nonsense[fact]} <small>A completely unserious intermission.</small></p>}
+   {error&&<p role="alert" className="notice error">{error}</p>}{notice&&<p role="status">{notice}</p>}
+   {!busy&&run?.data.result&&<>
+    <p className="response-message">{run.data.result.message || 'Here is what I found. Review each suggestion before saving.'}</p>
+    {run.data.result.items.map(item=><article className="suggestion" key={item.temp_id}>
+     <span className="eyebrow">{item.kind.replace(/_/g,' ')}</span><h3>{item.title}{item.quantity>1?` (${item.quantity})`:''}</h3>
+     <p>{item.estimated_minutes==null?'Time needed: unknown':`${item.estimate_qualifier==='minimum'?'At least ':item.estimate_qualifier==='approximate'?'About ':''}${item.estimated_minutes} min ${item.estimate_basis==='per_item'?'each':'total'}`}{item.deadline?` - Due ${new Date(item.deadline).toLocaleString()}`:''}</p>
+     {item.start&&<p>{new Date(item.start).toLocaleString()} - {item.end?new Date(item.end).toLocaleString():'end time needed'}</p>}
+     {item.recurrence&&<p>{item.recurrence}{!item.start?` - All-day habit, starts ${item.anchor_date || 'today'}`:''}</p>}
+     <button className="button secondary small" disabled={busy || !!run.data.applied?.[item.temp_id]} onClick={()=>approve(item.temp_id)}>{run.data.applied?.[item.temp_id]?<><Check size={14}/> Saved</>:'Approve and save'}</button>
+    </article>)}
+    {run.data.result.amendments?.map(a=><article className="suggestion" key={a.amendment_id}><h3>{a.action==='defer'?'Defer commitment':'Move commitment'}</h3><p>{a.reason}</p>{a.start&&<p>{new Date(a.start).toLocaleString()} - {a.end&&new Date(a.end).toLocaleString()}</p>}<button className="button secondary small" disabled={!!run.data.applied?.[a.amendment_id]} onClick={()=>approve(a.amendment_id)}>{run.data.applied?.[a.amendment_id]?'Saved':'Approve change'}</button></article>)}
+    {!!run.data.result.questions.length&&<div className="response-questions"><strong>Before we go further</strong>{run.data.result.questions.map((q,i)=><p key={i}>{q.question}</p>)}<small>Add your answers to the dump below and submit again.</small></div>}
+    {!!run.data.result.unfiled.length&&<details><summary>Context kept out of your lists</summary>{run.data.result.unfiled.map((u,i)=><p key={i}>{u.reason}</p>)}</details>}
+    <small className="run-meta">{run.data.attempts} AI request(s) - Stage {run.data.demo_stage||1} - Nothing changes without approval.</small>
+   </>}
+  </section>}
+  <form className="capture-box" onSubmit={submit}><label htmlFor="live-dump">Your mind dump</label><textarea id="live-dump" disabled={busy || listening} maxLength={10000} value={text} onChange={e=>setText(e.target.value)} placeholder="Assignments, plans, the thing you nearly forgot..."/>
+   {interim&&<p aria-live="polite">{interim}</p>}
+   <div className="capture-controls"><button type="button" className={'button secondary '+(listening?'recording':'')} disabled={busy || !voiceAvailable} onClick={voice}>{listening?<Square size={17}/>:<Mic size={17}/>} {listening?'Stop':'Speak'}</button>
+    <select aria-label="Voice language" value={language} disabled={busy||listening} onChange={e=>setLanguage(e.target.value)}><option value="en-IN">English</option><option value="hi-IN">Hindi</option></select>
+    <button className="button primary" disabled={busy || listening || !text.trim()}><Send size={16}/>{busy?'Working...':'Sort it'}</button></div>
+   <small>{listening?'Listening. Stop to review your transcript.':voiceAvailable?'Voice uses your browser speech service. Review before sending.':'Voice recognition is unavailable in this browser. You can type or use your keyboard microphone.'}</small>
+  </form>
+ </div>
 }

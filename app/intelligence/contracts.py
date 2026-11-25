@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, AwareDatetime, model_validator
 from ..schemas import Window
@@ -6,7 +7,7 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
 class Evidence(StrictModel):
-    field: Literal['title','kind','deadline','start','end','estimated_minutes','priority','recurrence','category','quantity','estimate_qualifier','estimate_basis']
+    field: Literal['title','kind','deadline','start','end','estimated_minutes','priority','recurrence','category','quantity','estimate_qualifier','estimate_basis','anchor_date']
     origin: Literal['explicit','derived','suggested','unknown']
     quote: str = Field(max_length=1000)
     reason: str = Field(max_length=500)
@@ -24,6 +25,7 @@ class Proposal(StrictModel):
     priority: int | None = Field(ge=0,le=100)
     recurrence: Literal['daily','weekly'] | None
     category: str | None = Field(max_length=100)
+    anchor_date: date | None = None
     quantity: int = Field(default=1,ge=1,le=100)
     estimate_qualifier: Literal['approximate','minimum','unspecified'] = 'unspecified'
     estimate_basis: Literal['per_item','total'] = 'total'
@@ -52,7 +54,19 @@ class Unfiled(StrictModel):
     source_quote: str = Field(min_length=1,max_length=1000)
     reason: str = Field(min_length=1,max_length=300)
 
+class Amendment(StrictModel):
+    amendment_id: str = Field(min_length=1,max_length=40)
+    entry_id: str
+    version: int = Field(ge=1)
+    action: Literal['reschedule','defer']
+    start: AwareDatetime | None
+    end: AwareDatetime | None
+    source_quote: str = Field(min_length=1,max_length=1000)
+    reason: str = Field(max_length=500)
+
 class Interpretation(StrictModel):
+    message: str = Field(default='',max_length=1800)
+    amendments: list[Amendment] = Field(default_factory=list,max_length=5)
     items: list[Proposal] = Field(max_length=20)
     questions: list[Question] = Field(max_length=3)
     unfiled: list[Unfiled] = Field(max_length=20)
@@ -60,6 +74,7 @@ class Interpretation(StrictModel):
 class InterpretRequest(StrictModel):
     capture_id: str = Field(min_length=1,max_length=128)
     horizon: Window
+    demo_stage: Literal[1,2,3] = 1
 
 class TradeoffChange(StrictModel):
     entry_id: str
